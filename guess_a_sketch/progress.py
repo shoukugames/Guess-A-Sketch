@@ -64,7 +64,8 @@ class Progress:
         self.save()
 
     def clear(self):
-        self.data = {"sessions": [], "highest_level": 1}
+        """Erase play history but keep settings such as the language."""
+        self.data = {"sessions": [], "highest_level": 1, "settings": self.data.get("settings", {})}
         self.save()
 
     def summary(self):

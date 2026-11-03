@@ -85,3 +85,36 @@ class LogicTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class I18nTests(unittest.TestCase):
+    def test_every_word_has_japanese_name(self):
+        from guess_a_sketch import i18n
+        missing = [w for w in drawings.WORDS if not i18n.JA_NAMES.get(w)]
+        self.assertEqual(missing, [])
+
+    def test_both_languages_have_same_keys(self):
+        from guess_a_sketch import i18n
+        self.assertEqual(set(i18n.STRINGS["en"]), set(i18n.STRINGS["ja"]))
+
+    def test_format_strings_match(self):
+        from guess_a_sketch import i18n
+        for k, en in i18n.STRINGS["en"].items():
+            if isinstance(en, str):
+                ja = i18n.STRINGS["ja"][k]
+                self.assertEqual(en.count("%"), ja.count("%"), k)
+
+    def test_translate_and_duration(self):
+        from guess_a_sketch import i18n
+        try:
+            i18n.set_lang("ja")
+            self.assertEqual(i18n.T("level", 3), "レベル 3")
+            self.assertEqual(i18n.duration(125), "2分05秒")
+            self.assertEqual(i18n.word_label("CAT"), "CAT（ねこ）")
+            for r in ("Quit", "Time ran out", "Out of chances"):
+                self.assertNotEqual(i18n.T("res_" + r), "res_" + r)
+            i18n.set_lang("en")
+            self.assertEqual(i18n.duration(125), "2m 05s")
+            self.assertEqual(i18n.word_label("CAT"), "CAT")
+        finally:
+            i18n.set_lang("en")

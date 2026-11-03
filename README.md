@@ -3,11 +3,20 @@
 A hangman-style spelling game for kids. Instead of a hangman, every wrong letter
 sketches more of the mystery object. Spell the word before the drawing is finished!
 
-Downloads: `guess-a-sketch_0.1.0_amd64.deb` (Linux) and `GuessASketch-0.1.0-win64.exe` (Windows).
+Downloads: `guess-a-sketch_0.2.0_amd64.deb` (Linux) and `GuessASketch-0.2.0-win64.exe` (Windows).
 The .deb installs `README.md` and `BUGREPORT.md` to `/usr/share/doc/guess-a-sketch/`.
 
-**Version 0.1.0** · released November 3, 2026 · created by Shawn Rapaz and Claude Code
+**Version 0.2.0** · released November 4, 2026 · created by Shawn Rapaz and Claude Code
 · https://shoukugames.org/ · info@shoukugames.org
+
+## Languages / 言語
+The game plays in **English** or **Japanese (日本語)**. Use the **English / 日本語** toggle at the
+top-right of the main menu; the choice is remembered. On first launch the game picks Japanese if
+the computer is set to Japanese.
+
+In Japanese mode all menus, messages, the For Parents screen (おうちの方へ) and the credits are in
+Japanese, while players still spell the **English** word, which makes it English spelling practice.
+When a word is finished, its Japanese name is shown as a clue (e.g. `CAT = ねこ`).
 
 ## How to play
 - The first stroke(s) of a drawing appear as a hint. Type letters (or click the on-screen keyboard).
@@ -20,6 +29,9 @@ The .deb installs `README.md` and `BUGREPORT.md` to `/usr/share/doc/guess-a-sket
 
 The **For Parents** screen (on the title menu) shows total play time, scores, level reached, and which word (and level) each game ended on.
 Saved to `~/.local/share/guess-a-sketch/progress.json` (Linux) or `%APPDATA%\GuessASketch\progress.json` (Windows).
+
+## Credits
+Japanese text uses the font M PLUS Rounded 1c (SIL Open Font License, see `assets/fonts/OFL-MPLUSRounded1c.txt`).
 
 ## Reporting bugs
 Found a problem? See [BUGREPORT.md](BUGREPORT.md) for what to include, then email

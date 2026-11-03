@@ -8,9 +8,10 @@ import webbrowser
 
 import pygame
 
-from . import drawings, logic, version
+from . import drawings, i18n, logic, version
+from .i18n import T
 from .audio import Audio
-from .progress import Progress, fmt_duration
+from .progress import Progress
 from .sketch import Sketch
 
 W, H = 1280, 720          # logical resolution; the window scales this
@@ -36,33 +37,45 @@ def resource_path(*parts):
 # ====================================================================== text
 class Fonts:
     def __init__(self):
-        self.path = resource_path("assets", "fonts", "freesansbold.ttf")
+        self.latin = resource_path("assets", "fonts", "freesansbold.ttf")
+        self.japanese = resource_path("assets", "fonts", "MPLUSRounded1c-Bold.ttf")
         self._fonts = {}
         self._cache = {}
 
-    def font(self, size):
-        if size not in self._fonts:
+    def font(self, size, path=None):
+        path = path or self.latin
+        key = (path, size)
+        if key not in self._fonts:
             try:
-                self._fonts[size] = pygame.font.Font(self.path, size)
+                self._fonts[key] = pygame.font.Font(path, size)
             except (OSError, FileNotFoundError):
-                self._fonts[size] = pygame.font.Font(None, int(size * 1.3))
-        return self._fonts[size]
+                self._fonts[key] = pygame.font.Font(None, int(size * 1.3))
+        return self._fonts[key]
 
     def render(self, text, size, color):
-        key = (text, size, color)
+        jp = i18n.LANG == "ja" or any(ord(c) > 127 for c in text)
+        key = (text, size, color, jp)
         surf = self._cache.get(key)
         if surf is None:
             if len(self._cache) > 600:
                 self._cache.clear()
-            surf = self.font(size).render(text, True, color)
+            surf = self.font(size, self.japanese if jp else self.latin).render(text, True, color)
             self._cache[key] = surf
         return surf
+
+    def fit(self, text, size, max_w):
+        """Largest size <= size at which text fits in max_w pixels."""
+        while size > 12 and self.render(text, size, (0, 0, 0)).get_width() > max_w:
+            size -= 2
+        return size
 
 
 FONTS = None
 
 
-def text(surf, s, size, color, pos, anchor="topleft", shadow=None):
+def text(surf, s, size, color, pos, anchor="topleft", shadow=None, max_w=None):
+    if max_w:
+        size = FONTS.fit(s, size, max_w)
     img = FONTS.render(s, size, color)
     r = img.get_rect(**{anchor: pos})
     if shadow:
@@ -130,7 +143,7 @@ class Button:
         pygame.draw.rect(surf, shade(base, 1.12) if hover else base, r, border_radius=16)
         if self.selected:
             pygame.draw.rect(surf, (255, 255, 255), r.inflate(-6, -6), 3, border_radius=13)
-        text(surf, self.label, self.size, self.text_color, r.center, "center")
+        text(surf, self.label, self.size, self.text_color, r.center, "center", max_w=r.w - 16)
 
     def hit(self, pos):
         return self.visible and self.enabled and self.rect.collidepoint(pos)
@@ -179,23 +192,37 @@ class TitleScene(Scene):
         self.show_words = list(drawings.WORDS)
         random.shuffle(self.show_words)
         x = 720
-        self.play_btn = Button((x, 200, 480, 78), "PLAY", self.start, ACCENT, 44)
+        self.play_btn = Button((x, 200, 480, 78), T("play"), self.start, ACCENT, 44)
         self.diff_btns = []
         for i, d in enumerate(logic.DIFFICULTIES):
-            b = Button((x + i * 164, 330, 152, 56), d, lambda d=d: self.set_diff(d),
+            b = Button((x + i * 164, 330, 152, 56), T("diff_" + d), lambda d=d: self.set_diff(d),
                        (GOOD, GOLD, BAD)[i], 26, INK if d == "Medium" else (255, 255, 255))
+            b.value = d
             self.diff_btns.append(b)
         self.lvl_down = Button((x, 432, 64, 56), "<", lambda: self.step_level(-1), BLUEBTN, 32)
         self.lvl_up = Button((x + 416, 432, 64, 56), ">", lambda: self.step_level(1), BLUEBTN, 32)
         self.buttons = [self.play_btn, *self.diff_btns, self.lvl_down, self.lvl_up,
-                        Button((x, 520, 480, 56), "For Parents", lambda: app.go(ParentScene(app)), PURPLEBTN, 28),
-                        Button((x, 588, 234, 56), "Credits", lambda: app.go(CreditsScene(app)), (90, 170, 190), 28),
-                        Button((x + 246, 588, 234, 56), "Quit", app.quit, (130, 134, 150), 28)]
+                        Button((x, 520, 480, 56), T("for_parents"), lambda: app.go(ParentScene(app)), PURPLEBTN, 28),
+                        Button((x, 588, 234, 56), T("credits"), lambda: app.go(CreditsScene(app)), (90, 170, 190), 28),
+                        Button((x + 246, 588, 234, 56), T("quit"), app.quit, (130, 134, 150), 28)]
+        # language toggle (top-right of the main menu)
+        self.lang_btns = []
+        for i, (code, label) in enumerate((("en", "English"), ("ja", "日本語"))):
+            b = Button((W - 300 + i * 142, 16, 132, 46), label, lambda c=code: self.set_lang(c), (90, 170, 190), 22)
+            b.value = code
+            b.selected = code == i18n.LANG
+            self.lang_btns.append(b)
+        self.buttons += self.lang_btns
         self.refresh()
         self.next_showcase()
 
     def max_level(self):
         return max(10, self.app.progress.highest_level)
+
+    def set_lang(self, code):
+        if code != i18n.LANG:
+            self.app.set_language(code)
+            self.app.go(TitleScene(self.app))   # rebuild labels in the new language
 
     def set_diff(self, d):
         self.app.settings["difficulty"] = d
@@ -208,7 +235,7 @@ class TitleScene(Scene):
 
     def refresh(self):
         for b in self.diff_btns:
-            b.selected = b.label == self.app.settings["difficulty"]
+            b.selected = b.value == self.app.settings["difficulty"]
         lv = self.app.settings["start_level"]
         self.lvl_down.enabled = lv > 1
         self.lvl_up.enabled = lv < self.max_level()
@@ -241,29 +268,28 @@ class TitleScene(Scene):
     def draw(self, s):
         t = pygame.time.get_ticks() / 1000.0
         bob = math.sin(t * 2) * 4
-        text(s, version.APP_NAME, 78, ACCENT, (W // 2, 70 + bob), "center", shadow=INK)
-        text(s, "Spell the word before the sketch is finished!", 26, INK, (W // 2, 132), "center")
+        text(s, version.APP_NAME, 78, ACCENT, (W // 2 - 60, 70 + bob), "center", shadow=INK)
+        text(s, T("subtitle"), 26, INK, (W // 2, 132), "center", max_w=900)
         # showcase card
         card = pygame.Rect(90, 180, 480, 480)
         paper_card(s, card)
         s.blit(self.showcase.render(420), (card.x + 30, card.y + 22))
         if self.showcase.color > 0.6:
-            text(s, self.showcase.word, 34, INK, (card.centerx, card.bottom - 30), "center")
+            text(s, i18n.word_label(self.showcase.word), 34, INK, (card.centerx, card.bottom - 30), "center", max_w=440)
         # menu
-        text(s, "Difficulty", 24, INK, (720, 300))
+        text(s, T("difficulty"), 24, INK, (720, 300))
         mult = logic.SCORE_MULT[self.app.settings["difficulty"]]
-        text(s, "points x%d" % mult, 22, SOFT_INK, (1200, 302), "topright")
-        text(s, "Start level", 24, INK, (720, 402))
+        text(s, T("points_x", mult), 22, SOFT_INK, (1200, 302), "topright")
+        text(s, T("start_level"), 24, INK, (720, 402))
         lv = self.app.settings["start_level"]
         n = logic.word_length(lv)
         pygame.draw.rect(s, (255, 255, 255), (790, 432, 340, 56), border_radius=14)
         pygame.draw.rect(s, INK, (790, 432, 340, 56), 3, border_radius=14)
-        label = "Level %d  -  %d letters" % (lv, n)
-        text(s, label, 26, INK, (960, 460), "center")
+        text(s, T("level_letters", lv, n), 26, INK, (960, 460), "center", max_w=320)
         if lv >= logic.EXPERT_LEVEL:
-            text(s, "Expert: 60-second timer", 20, BAD, (1200, 404), "topright")
+            text(s, T("expert_note"), 20, BAD, (1200, 404), "topright")
         self.draw_buttons(s)
-        text(s, "v%s  -  %s" % (version.VERSION, version.RELEASE_DATE_LONG), 18, SOFT_INK, (16, H - 12), "bottomleft")
+        text(s, "v%s  -  %s" % (version.VERSION, version.release_date()), 18, SOFT_INK, (16, H - 12), "bottomleft")
 
 
 # ---------------------------------------------------------------------- play
@@ -292,12 +318,12 @@ class PlayScene(Scene):
             for i, ch in enumerate(row):
                 self.keys[ch] = pygame.Rect(x0 + i * (kw + gap), top + r * (kw + gap), kw, kw)
         self.hint_btn = Button((620, 590, 300, 66), "", self.use_hint, GOLD, 28, INK, sound=None)
-        self.pause_btn = Button((940, 590, 270, 66), "Pause", self.pause, (130, 134, 150), 28)
+        self.pause_btn = Button((940, 590, 270, 66), T("pause"), self.pause, (130, 134, 150), 28)
         self.buttons = [self.hint_btn, self.pause_btn]
         # overlay buttons
-        self.continue_btn = Button((W // 2 - 150, 470, 300, 66), "Continue", self.continue_level, ACCENT, 30)
-        self.resume_btn = Button((W // 2 - 150, 330, 300, 66), "Resume", self.resume, GOOD, 30)
-        self.quit_btn = Button((W // 2 - 150, 420, 300, 66), "Quit to Title", self.quit_to_title, BAD, 30)
+        self.continue_btn = Button((W // 2 - 150, 470, 300, 66), T("continue"), self.continue_level, ACCENT, 30)
+        self.resume_btn = Button((W // 2 - 150, 330, 300, 66), T("resume"), self.resume, GOOD, 30)
+        self.quit_btn = Button((W // 2 - 150, 420, 300, 66), T("quit_title"), self.quit_to_title, BAD, 30)
         self.start_word()
 
     # ----------------------------------------------------------- flow
@@ -306,7 +332,7 @@ class PlayScene(Scene):
         self.sketch.show_stages(1, 1.2)
         self.phase = "play"
         self.phase_t = 0.0
-        self.say("Level %d - word %d of %d" % (self.game.level, self.game.word_in_level + 1, logic.WORDS_PER_LEVEL), INK)
+        self.say(T("word_intro", self.game.level, self.game.word_in_level + 1, logic.WORDS_PER_LEVEL), INK)
 
     def say(self, m, color=INK, t=2.2):
         self.msg, self.msg_color, self.msg_t = m, color, t
@@ -315,16 +341,16 @@ class PlayScene(Scene):
         a = self.app.audio
         if res == "repeat":
             a.sfx("already")
-            self.say("You already tried %s" % letter, SOFT_INK)
+            self.say(T("already", letter), SOFT_INK)
         elif res == "correct":
             a.sfx("correct")
-            self.say(random.choice(("Nice!", "Good one!", "Yes!", "Great!")), GOOD, 1.2)
+            self.say(random.choice(T("praise")), GOOD, 1.2)
         elif res == "wrong":
             a.sfx("wrong")
             self.shake = 0.35
             self.sketch.show_stages(1 + self.game.wrong_count)
             left = self.game.chances
-            self.say("No %s - %d chance%s left" % (letter, left, "" if left == 1 else "s"), BAD)
+            self.say(T("wrong_one", letter) if left == 1 else T("wrong_many", letter, left), BAD)
         elif res == "won":
             self.win()
         elif res == "lost":
@@ -372,12 +398,12 @@ class PlayScene(Scene):
         letter = self.game.use_hint()
         if letter:
             self.app.audio.sfx("hint")
-            self.say("Hint: the word has a %s" % letter, (200, 140, 0))
+            self.say(T("hint_msg", letter), (200, 140, 0))
             if self.game.state == "won":
                 self.win()
         else:
             self.app.audio.sfx("already")
-            self.say("No hints left!", SOFT_INK)
+            self.say(T("no_hints"), SOFT_INK)
 
     def pause(self):
         if self.phase in ("play", "won", "levelup"):
@@ -471,7 +497,7 @@ class PlayScene(Scene):
             self.next_after_win()
         elif self.phase == "lost" and self.phase_t > 5.0:
             self.to_game_over()
-        self.hint_btn.label = "Hint  (%d left)" % self.game.hints_left
+        self.hint_btn.label = T("hint_btn", self.game.hints_left)
         self.hint_btn.enabled = self.phase == "play" and self.game.hints_left > 0
 
     # ----------------------------------------------------------- draw
@@ -479,10 +505,10 @@ class PlayScene(Scene):
         g = self.game
         # top bar
         panel(s, (20, 14, W - 40, 72), (255, 255, 255), 20)
-        text(s, "Level %d" % g.level, 34, INK, (44, 24))
-        sub = "%d-letter words  -  word %d of %d  -  %s" % (len(g.word), g.word_in_level + 1, logic.WORDS_PER_LEVEL, g.difficulty)
-        text(s, sub, 18, SOFT_INK, (46, 62))
-        text(s, "Score", 18, SOFT_INK, (W - 44, 24), "topright")
+        text(s, T("level", g.level), 34, INK, (44, 18))
+        sub = T("play_sub", len(g.word), g.word_in_level + 1, logic.WORDS_PER_LEVEL, T("diff_" + g.difficulty))
+        text(s, sub, 18, SOFT_INK, (46, 58), max_w=500)
+        text(s, T("score"), 18, SOFT_INK, (W - 44, 22), "topright")
         text(s, "%d" % g.score, 34, INK, (W - 44, 44), "topright")
         self.draw_timer(s, (W // 2 + 60, 50))
 
@@ -492,10 +518,10 @@ class PlayScene(Scene):
         paper_card(s, card)
         s.blit(self.sketch.render(460), (card.x + 30, card.y + 28))
         wrong = " ".join(g.wrong) if g.wrong else "-"
-        text(s, "Wrong letters:  " + wrong, 22, BAD if g.wrong else SOFT_INK, (44, 640))
+        text(s, T("wrong_letters") + wrong, 22, BAD if g.wrong else SOFT_INK, (44, 640))
 
         # chances
-        text(s, "Chances", 24, INK, (620, 112))
+        text(s, T("chances"), 24, INK, (620, 112), max_w=140)
         for i in range(logic.MAX_CHANCES):
             alive = i < g.chances
             cx = 780 + i * 46
@@ -507,7 +533,7 @@ class PlayScene(Scene):
             c = GOLD if i < g.hints_left else (220, 220, 228)
             pygame.draw.circle(s, c, (1108 + i * 34, 124), 12)
             pygame.draw.circle(s, INK, (1108 + i * 34, 124), 12, 2)
-        text(s, "Hints", 18, SOFT_INK, (1108 - 16, 142))
+        text(s, T("hints"), 18, SOFT_INK, (1142, 142), "midtop")
 
         self.draw_blanks(s)
         if self.msg_t > 0 and self.phase == "play":
@@ -516,18 +542,18 @@ class PlayScene(Scene):
         self.draw_buttons(s)
 
         if self.phase == "won":
-            self.overlay_banner(s, "Great job!", "+%d points" % g.last_points, GOOD,
-                                "Click or press Enter to continue" if self.phase_t > 1.2 else "")
+            self.overlay_banner(s, T("great_job"), T("points_plus", g.last_points), GOOD,
+                                T("click_continue") if self.phase_t > 1.2 else "", self.clue())
         elif self.phase == "lost":
-            head = "Time's up!" if g.lose_reason == "time" else "Out of chances!"
-            self.overlay_banner(s, head, "The word was  %s" % g.word, BAD,
-                                "Click or press Enter" if self.phase_t > 1.5 else "")
+            head = T("times_up") if g.lose_reason == "time" else T("out_of_chances")
+            self.overlay_banner(s, head, T("word_was", g.word), BAD,
+                                T("click_enter") if self.phase_t > 1.5 else "", self.clue())
         elif self.phase == "levelup":
             self.draw_levelup(s)
         elif self.phase == "paused":
             self.dim(s)
             panel(s, (W // 2 - 220, 200, 440, 330), (255, 255, 255))
-            text(s, "Paused", 48, INK, (W // 2, 260), "center")
+            text(s, T("paused"), 48, INK, (W // 2, 260), "center")
             for b in (self.resume_btn, self.quit_btn):
                 b.draw(s, self.app.mouse)
 
@@ -546,7 +572,7 @@ class PlayScene(Scene):
         pygame.draw.circle(s, INK, c, r, 3)
         pygame.draw.circle(s, (255, 255, 255), c, r - 9)
         text(s, "%d" % math.ceil(t), int(24 * pulse), BAD if urgent else INK, c, "center")
-        text(s, "Time", 18, SOFT_INK, (c[0] - 44, c[1]), "midright")
+        text(s, T("time"), 18, SOFT_INK, (c[0] - 44, c[1]), "midright")
 
     def draw_blanks(self, s):
         g = self.game
@@ -587,12 +613,22 @@ class PlayScene(Scene):
         d.fill((20, 22, 40, 150))
         s.blit(d, (0, 0))
 
-    def overlay_banner(self, s, head, sub, color, foot):
+    def clue(self):
+        """Japanese name of the word, shown once the round is over (Japanese mode)."""
+        if i18n.LANG == "ja" and i18n.ja_name(self.game.word):
+            return "%s = %s" % (self.game.word, i18n.ja_name(self.game.word))
+        return ""
+
+    def overlay_banner(self, s, head, sub, color, foot, clue=""):
         r = pygame.Rect(600, 330, 620, 240)
         panel(s, r, (255, 255, 255))
         pygame.draw.rect(s, color, (r.x, r.y, r.w, 74), border_top_left_radius=22, border_top_right_radius=22)
-        text(s, head, 44, (255, 255, 255), (r.centerx, r.y + 38), "center")
-        text(s, sub, 34, INK, (r.centerx, r.y + 128), "center")
+        text(s, head, 44, (255, 255, 255), (r.centerx, r.y + 38), "center", max_w=r.w - 30)
+        if clue:
+            text(s, sub, 32, INK, (r.centerx, r.y + 108), "center", max_w=r.w - 30)
+            text(s, clue, 30, ACCENT, (r.centerx, r.y + 156), "center", max_w=r.w - 30)
+        else:
+            text(s, sub, 34, INK, (r.centerx, r.y + 128), "center", max_w=r.w - 30)
         if foot:
             text(s, foot, 20, SOFT_INK, (r.centerx, r.bottom - 34), "center")
 
@@ -601,16 +637,16 @@ class PlayScene(Scene):
         g = self.game
         r = pygame.Rect(W // 2 - 330, 150, 660, 420)
         panel(s, r, (255, 255, 255))
-        text(s, "Level %d complete!" % (g.level - 1), 52, ACCENT, (W // 2, 220), "center", shadow=INK)
-        text(s, "Score: %d" % g.score, 32, INK, (W // 2, 290), "center")
+        text(s, T("level_complete", g.level - 1), 52, ACCENT, (W // 2, 220), "center", shadow=INK, max_w=620)
+        text(s, T("score_line", g.score), 32, INK, (W // 2, 290), "center")
         n = logic.word_length(g.level)
-        text(s, "Next: Level %d  -  %d-letter words" % (g.level, n), 28, INK, (W // 2, 350), "center")
+        text(s, T("next_level", g.level, n), 28, INK, (W // 2, 350), "center", max_w=620)
         if g.level == logic.EXPERT_LEVEL:
-            text(s, "Expert mode! Tougher words and only 60 seconds.", 24, BAD, (W // 2, 400), "center")
+            text(s, T("expert_msg"), 24, BAD, (W // 2, 400), "center", max_w=620)
         elif g.level > logic.EXPERT_LEVEL:
-            text(s, "Words keep getting tougher. 60 seconds each.", 24, BAD, (W // 2, 400), "center")
+            text(s, T("tougher_msg"), 24, BAD, (W // 2, 400), "center", max_w=620)
         else:
-            text(s, "%d seconds per word" % int(logic.time_limit(g.level)), 24, SOFT_INK, (W // 2, 400), "center")
+            text(s, T("secs_per_word", int(logic.time_limit(g.level))), 24, SOFT_INK, (W // 2, 400), "center")
         self.continue_btn.draw(s, self.app.mouse)
 
 
@@ -622,8 +658,8 @@ class GameOverScene(Scene):
         self.sketch = sketch
         self.sketch.finish(colour=True, duration=0.6)
         self.buttons = [
-            Button((700, 560, 240, 70), "Play Again", self.again, ACCENT, 30),
-            Button((960, 560, 240, 70), "Main Menu", lambda: app.go(TitleScene(app)), BLUEBTN, 30),
+            Button((700, 560, 240, 70), T("play_again"), self.again, ACCENT, 30),
+            Button((960, 560, 240, 70), T("main_menu"), lambda: app.go(TitleScene(app)), BLUEBTN, 30),
         ]
 
     def again(self):
@@ -645,19 +681,18 @@ class GameOverScene(Scene):
         card = pygame.Rect(80, 110, 500, 500)
         paper_card(s, card)
         s.blit(self.sketch.render(440), (card.x + 30, card.y + 20))
-        text(s, g.word, 40, INK, (card.centerx, card.bottom + 40), "center")
-        text(s, "Game Over", 72, BAD, (950, 150), "center", shadow=INK)
-        why = "Time ran out on" if g.lose_reason == "time" else "Out of chances on"
+        text(s, i18n.word_label(g.word), 40, INK, (card.centerx, card.bottom + 40), "center", max_w=560)
+        text(s, T("game_over"), 72, BAD, (950, 150), "center", shadow=INK, max_w=560)
         lines = [
-            ("%s:  %s" % (why, g.word), INK),
-            ("Final score:  %d" % g.score, INK),
-            ("Level reached:  %d   (%s)" % (g.level, g.difficulty), INK),
-            ("Words spelled:  %d" % g.words_solved, INK),
-            ("Time played:  %s" % fmt_duration(g.elapsed), INK),
+            (T("why_time" if g.lose_reason == "time" else "why_chances", g.word), INK),
+            (T("final_score", g.score), INK),
+            (T("level_reached", g.level, T("diff_" + g.difficulty)), INK),
+            (T("words_spelled", g.words_solved), INK),
+            (T("time_played", i18n.duration(g.elapsed)), INK),
         ]
         panel(s, (700, 230, 500, 300), (255, 255, 255))
         for i, (ln, c) in enumerate(lines):
-            text(s, ln, 26, c, (730, 262 + i * 52))
+            text(s, ln, 26, c, (730, 262 + i * 52), max_w=450)
         self.draw_buttons(s)
 
 
@@ -669,11 +704,11 @@ class ParentScene(Scene):
         super().__init__(app)
         self.page = 0
         self.confirm = False
-        self.prev_btn = Button((40, 640, 150, 56), "< Newer", lambda: self.turn(-1), BLUEBTN, 24)
-        self.next_btn = Button((200, 640, 150, 56), "Older >", lambda: self.turn(1), BLUEBTN, 24)
-        self.clear_btn = Button((720, 640, 270, 56), "Clear History", self.clear, BAD, 24)
+        self.prev_btn = Button((40, 640, 150, 56), T("newer"), lambda: self.turn(-1), BLUEBTN, 24)
+        self.next_btn = Button((200, 640, 150, 56), T("older"), lambda: self.turn(1), BLUEBTN, 24)
+        self.clear_btn = Button((720, 640, 270, 56), T("clear"), self.clear, BAD, 24)
         self.buttons = [self.prev_btn, self.next_btn, self.clear_btn,
-                        Button((1006, 640, 190, 56), "Back", lambda: app.go(TitleScene(app)), (130, 134, 150), 26)]
+                        Button((1006, 640, 190, 56), T("back"), lambda: app.go(TitleScene(app)), (130, 134, 150), 26)]
 
     def pages(self):
         return max(1, (len(self.app.progress.sessions) + self.PER_PAGE - 1) // self.PER_PAGE)
@@ -684,11 +719,11 @@ class ParentScene(Scene):
     def clear(self):
         if not self.confirm:
             self.confirm = True
-            self.clear_btn.label = "Click again to confirm"
+            self.clear_btn.label = T("confirm")
         else:
             self.app.progress.clear()
             self.confirm = False
-            self.clear_btn.label = "Clear History"
+            self.clear_btn.label = T("clear")
             self.page = 0
 
     def on_key(self, e):
@@ -701,32 +736,33 @@ class ParentScene(Scene):
         self.clear_btn.enabled = bool(self.app.progress.sessions)
 
     def draw(self, s):
-        text(s, "For Parents", 52, PURPLEBTN, (W // 2, 46), "center", shadow=INK)
+        text(s, T("for_parents"), 52, PURPLEBTN, (W // 2, 46), "center", shadow=INK)
         sm = self.app.progress.summary()
-        cards = [("Total time played", fmt_duration(sm["total_seconds"])), ("Games played", str(sm["games"])),
-                 ("Best score", str(sm["best_score"])), ("Highest level", str(sm["highest_level"])),
-                 ("Words spelled", str(sm["words_solved"]))]
+        cards = [(T("total_time"), i18n.duration(sm["total_seconds"])), (T("games_played"), str(sm["games"])),
+                 (T("best_score"), str(sm["best_score"])), (T("highest_level"), str(sm["highest_level"])),
+                 (T("words_total"), str(sm["words_solved"]))]
         cw = (W - 80 - 4 * 16) // 5
         for i, (lab, val) in enumerate(cards):
             r = pygame.Rect(40 + i * (cw + 16), 92, cw, 92)
             panel(s, r, (255, 255, 255), 16)
-            text(s, lab, 18, SOFT_INK, (r.centerx, r.y + 22), "center")
+            text(s, lab, 18, SOFT_INK, (r.centerx, r.y + 22), "center", max_w=cw - 16)
             text(s, val, 34, INK, (r.centerx, r.y + 60), "center")
 
-        practice = ", ".join("%s (%d)" % (w, n) for w, n in sm["practice"]) or "none yet"
-        text(s, "Words to practice (missed):  " + practice, 22, INK, (44, 200))
+        practice = ", ".join("%s (%d)" % (i18n.word_label(w), n) for w, n in sm["practice"]) or T("none_yet")
+        text(s, T("practice") + practice, 22, INK, (44, 200), max_w=W - 88)
 
         tbl = pygame.Rect(40, 236, W - 80, 392)
         panel(s, tbl, (255, 255, 255), 16)
-        cols = [("Date", 60), ("Played", 250), ("Score", 380), ("Mode", 490), ("Level", 610),
-                ("Result", 720), ("Missed word (level)", 920)]
-        for name, x in cols:
-            text(s, name, 20, SOFT_INK, (x, tbl.y + 16))
+        cols = [("col_date", 60), ("col_played", 250), ("col_score", 380), ("col_mode", 490), ("col_level", 610),
+                ("col_result", 720), ("col_missed", 900)]
+        widths = [185, 125, 105, 115, 105, 175, 330]
+        for (name, x), cwid in zip(cols, widths):
+            text(s, T(name), 20, SOFT_INK, (x, tbl.y + 16), max_w=cwid)
         pygame.draw.line(s, (220, 222, 232), (tbl.x + 12, tbl.y + 46), (tbl.right - 12, tbl.y + 46), 2)
         rows = list(reversed(self.app.progress.sessions))
         chunk = rows[self.page * self.PER_PAGE:(self.page + 1) * self.PER_PAGE]
         if not chunk:
-            text(s, "No games played yet. Progress appears here after each game.", 24, SOFT_INK, tbl.center, "center")
+            text(s, T("no_games"), 24, SOFT_INK, tbl.center, "center", max_w=tbl.w - 40)
         for i, r in enumerate(chunk):
             y = tbl.y + 60 + i * 47
             if i % 2 == 0:
@@ -736,13 +772,13 @@ class ParentScene(Scene):
                 lvl = "%d -> %d" % (r.get("start_level", 1), r.get("level_reached", 1))
             missed = "-"
             if r.get("failed_word"):
-                missed = "%s  (level %d)" % (r["failed_word"], r.get("failed_level") or r.get("level_reached", 1))
-            vals = [r.get("started_at", "?"), fmt_duration(r.get("duration_sec", 0)), str(r.get("score", 0)),
-                    r.get("difficulty", "?"), lvl, r.get("result", "?"), missed]
-            for (name, x), v in zip(cols, vals):
-                c = BAD if name.startswith("Missed") and v != "-" else INK
-                text(s, v, 22, c, (x, y))
-        text(s, "Page %d of %d" % (self.page + 1, self.pages()), 20, SOFT_INK, (370, 668), "midleft")
+                missed = T("missed_fmt", i18n.word_label(r["failed_word"]), r.get("failed_level") or r.get("level_reached", 1))
+            vals = [r.get("started_at", "?"), i18n.duration(r.get("duration_sec", 0)), str(r.get("score", 0)),
+                    T("diff_" + r.get("difficulty", "Easy")), lvl, T("res_" + r.get("result", "?")), missed]
+            for (name, x), v, cwid in zip(cols, vals, widths):
+                c = BAD if name == "col_missed" and v != "-" else INK
+                text(s, v, 22, c, (x, y), max_w=cwid)
+        text(s, T("page", self.page + 1, self.pages()), 20, SOFT_INK, (370, 668), "midleft")
         self.draw_buttons(s)
 
 
@@ -750,7 +786,7 @@ class ParentScene(Scene):
 class CreditsScene(Scene):
     def __init__(self, app):
         super().__init__(app)
-        self.buttons = [Button((W // 2 - 120, 630, 240, 60), "Back", lambda: app.go(TitleScene(app)), (130, 134, 150), 28)]
+        self.buttons = [Button((W // 2 - 120, 630, 240, 60), T("back"), lambda: app.go(TitleScene(app)), (130, 134, 150), 28)]
         self.links = {}
         self.sketch = Sketch("PENCIL")
         self.sketch.finish(True, 1.5)
@@ -779,24 +815,25 @@ class CreditsScene(Scene):
         panel(s, r, (255, 255, 255))
         s.blit(self.sketch.render(110), (r.x + 30, r.y + 20))
         s.blit(self.sketch.render(110), (r.right - 140, r.y + 20))
-        text(s, "Credits", 56, ACCENT, (W // 2, 90), "center", shadow=INK)
-        text(s, version.APP_NAME, 36, INK, (W // 2, 170), "center")
-        text(s, "Version %s" % version.VERSION, 26, INK, (W // 2, 220), "center")
-        text(s, "Released %s" % version.RELEASE_DATE_LONG, 24, SOFT_INK, (W // 2, 256), "center")
-        text(s, "Created by", 22, SOFT_INK, (W // 2, 312), "center")
-        text(s, version.AUTHORS, 32, INK, (W // 2, 348), "center")
+        text(s, T("credits"), 56, ACCENT, (W // 2, 90), "center", shadow=INK)
+        text(s, version.APP_NAME, 36, INK, (W // 2, 166), "center")
+        text(s, T("version", version.VERSION), 26, INK, (W // 2, 212), "center")
+        text(s, T("released", version.release_date()), 24, SOFT_INK, (W // 2, 248), "center")
+        text(s, T("created_by"), 22, SOFT_INK, (W // 2, 300), "center")
+        text(s, T("authors"), 32, INK, (W // 2, 336), "center")
         hover = self.app.mouse
-        lr = text(s, version.WEBSITE, 28, BLUEBTN, (W // 2, 420), "center")
+        lr = text(s, version.WEBSITE, 28, BLUEBTN, (W // 2, 410), "center")
         self.links[version.WEBSITE] = lr
-        er = text(s, version.EMAIL, 28, BLUEBTN, (W // 2, 470), "center")
+        er = text(s, version.EMAIL, 28, BLUEBTN, (W // 2, 462), "center")
         self.links["mailto:" + version.EMAIL] = er
         for rr in (lr, er):
             if rr.collidepoint(hover):
                 pygame.draw.line(s, BLUEBTN, (rr.left, rr.bottom), (rr.right, rr.bottom), 2)
-        text(s, "Website", 18, SOFT_INK, (W // 2, 394), "center")
-        text(s, "Email", 18, SOFT_INK, (W // 2, 446), "center")
-        text(s, "Original music & sound effects generated for this game.", 20, SOFT_INK, (W // 2, 530), "center")
-        text(s, "Made with Python and pygame.", 20, SOFT_INK, (W // 2, 560), "center")
+        text(s, T("website"), 18, SOFT_INK, (W // 2, 382), "center")
+        text(s, T("email"), 18, SOFT_INK, (W // 2, 436), "center")
+        text(s, T("music_note"), 20, SOFT_INK, (W // 2, 512), "center", max_w=740)
+        text(s, T("made_with"), 20, SOFT_INK, (W // 2, 542), "center", max_w=740)
+        text(s, T("font_note"), 18, SOFT_INK, (W // 2, 574), "center", max_w=740)
         self.draw_buttons(s)
 
 
@@ -826,6 +863,8 @@ class App:
         self.audio = Audio(resource_path("assets", "audio"))
         self.progress = Progress()
         self.settings = {"difficulty": "Easy", "start_level": 1}
+        lang = self.progress.data.get("settings", {}).get("language") or i18n.system_default()
+        i18n.set_lang(lang)
         self.mouse = (0, 0)
         self.running = True
         self.background = self.make_background()
@@ -855,6 +894,11 @@ class App:
                 pts = [(x + i * 8, y + (6 if i % 2 else -6)) for i in range(5)]
                 pygame.draw.lines(bg, c, False, pts, 2)
         return bg
+
+    def set_language(self, code):
+        i18n.set_lang(code)
+        self.progress.data.setdefault("settings", {})["language"] = i18n.LANG
+        self.progress.save()
 
     def go(self, scene):
         self.scene = scene

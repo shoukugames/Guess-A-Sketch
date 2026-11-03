@@ -9,7 +9,7 @@ please send a bug report by either:
 ## Before you report
 
 1. Check you're on the latest version. The version number is shown at the bottom-left of
-   the title screen and on the **Credits** screen (for example `v0.1.0`).
+   the title screen and on the **Credits** screen (for example `v0.2.0`).
 2. Try restarting the game and see if the problem happens again.
 
 ## What to include
@@ -17,9 +17,10 @@ please send a bug report by either:
 Copy this template and fill in what you can:
 
 ```
-Game version:        (e.g. v0.1.0, from the title screen or Credits)
+Game version:        (e.g. v0.2.0, from the title screen or Credits)
 Operating system:    (e.g. Windows 11, Ubuntu 24.04, Debian 12)
 Installed from:      (.deb package / Windows .exe / source)
+Language:            (English / 日本語)
 
 What happened:
 (Describe the problem.)
@@ -32,7 +33,7 @@ Steps to reproduce:
 3.
 
 Screen / level where it happened:
-(e.g. Title, Play - Level 4 Medium, For Parents, Credits, Game Over)
+(e.g. Title, Play - Level 4 Medium, For Parents / おうちの方へ, Credits, Game Over)
 
 Word on screen (if any):
 
@@ -51,6 +52,8 @@ Screenshot or video:        (attach if possible)
   it prints.
 - **Sound problems:** say whether other apps play sound, and whether the in-game mute button
   (bottom-right speaker, or `F1`) is turned on.
+- **Japanese text problems:** if Japanese characters show as boxes or are cut off, include a
+  screenshot and which screen it was on.
 - **Display problems:** say your screen resolution and whether the game was windowed,
   resized, or fullscreen (`F11`).
 
