@@ -23,6 +23,7 @@ for s in 48 64 128 256 512; do
 done
 mkdir -p "$STAGE/usr/share/doc/$PKG"
 cp LICENSE "$STAGE/usr/share/doc/$PKG/copyright"
+cp README.md BUGREPORT.md "$STAGE/usr/share/doc/$PKG/"
 
 cat > "$STAGE/usr/share/applications/$PKG.desktop" <<DESK
 [Desktop Entry]

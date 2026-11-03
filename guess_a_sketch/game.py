@@ -188,7 +188,7 @@ class TitleScene(Scene):
         self.lvl_down = Button((x, 432, 64, 56), "<", lambda: self.step_level(-1), BLUEBTN, 32)
         self.lvl_up = Button((x + 416, 432, 64, 56), ">", lambda: self.step_level(1), BLUEBTN, 32)
         self.buttons = [self.play_btn, *self.diff_btns, self.lvl_down, self.lvl_up,
-                        Button((x, 520, 480, 56), "Parent Progress", lambda: app.go(ParentScene(app)), PURPLEBTN, 28),
+                        Button((x, 520, 480, 56), "For Parents", lambda: app.go(ParentScene(app)), PURPLEBTN, 28),
                         Button((x, 588, 234, 56), "Credits", lambda: app.go(CreditsScene(app)), (90, 170, 190), 28),
                         Button((x + 246, 588, 234, 56), "Quit", app.quit, (130, 134, 150), 28)]
         self.refresh()
@@ -701,7 +701,7 @@ class ParentScene(Scene):
         self.clear_btn.enabled = bool(self.app.progress.sessions)
 
     def draw(self, s):
-        text(s, "Parent Progress", 52, PURPLEBTN, (W // 2, 46), "center", shadow=INK)
+        text(s, "For Parents", 52, PURPLEBTN, (W // 2, 46), "center", shadow=INK)
         sm = self.app.progress.summary()
         cards = [("Total time played", fmt_duration(sm["total_seconds"])), ("Games played", str(sm["games"])),
                  ("Best score", str(sm["best_score"])), ("Highest level", str(sm["highest_level"])),

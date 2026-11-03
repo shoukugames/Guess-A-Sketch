@@ -3,6 +3,9 @@
 A hangman-style spelling game for kids. Instead of a hangman, every wrong letter
 sketches more of the mystery object. Spell the word before the drawing is finished!
 
+Downloads: `guess-a-sketch_0.1.0_amd64.deb` (Linux) and `GuessASketch-0.1.0-win64.exe` (Windows).
+The .deb installs `README.md` and `BUGREPORT.md` to `/usr/share/doc/guess-a-sketch/`.
+
 **Version 0.1.0** · released November 3, 2026 · created by Shawn Rapaz and Claude Code
 · https://shoukugames.org/ · info@shoukugames.org
 
@@ -15,8 +18,12 @@ sketches more of the mystery object. Spell the word before the drawing is finish
 - Music speeds up when the timer reaches 10 seconds (again at 6 and 3).
 - Keys: `Esc` pause/back, `Enter` continue, `F11` fullscreen, `F1` mute. Drag window edges/corners to resize; the game scales to fit.
 
-The **Parent Progress** screen shows total play time, scores, level reached, and which word (and level) each game ended on.
+The **For Parents** screen (on the title menu) shows total play time, scores, level reached, and which word (and level) each game ended on.
 Saved to `~/.local/share/guess-a-sketch/progress.json` (Linux) or `%APPDATA%\GuessASketch\progress.json` (Windows).
+
+## Reporting bugs
+Found a problem? See [BUGREPORT.md](BUGREPORT.md) for what to include, then email
+info@shoukugames.org or open an issue at https://github.com/shoukugames/Guess-A-Sketch/issues.
 
 ## Run from source
 ```
