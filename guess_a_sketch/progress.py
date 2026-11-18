@@ -6,6 +6,10 @@ import sys
 import time
 from collections import Counter
 
+from . import WEB
+
+_WEB_KEY = "guess-a-sketch/progress.json"  # browser: localStorage key (files vanish with the page)
+
 
 def data_dir():
     if sys.platform.startswith("win"):
@@ -30,15 +34,27 @@ class Progress:
 
     def load(self):
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                d = json.load(f)
+            if WEB:
+                import platform  # pygbag's bridge to the page
+                raw = platform.window.localStorage.getItem(_WEB_KEY)
+                d = json.loads(str(raw)) if raw else None
+            else:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
             if isinstance(d, dict) and isinstance(d.get("sessions"), list):
                 self.data = d
                 self.data.setdefault("highest_level", 1)
-        except (OSError, ValueError):
+        except Exception:  # noqa: BLE001 - a damaged save starts fresh
             pass
 
     def save(self):
+        if WEB:
+            try:
+                import platform  # pygbag's bridge to the page
+                platform.window.localStorage.setItem(_WEB_KEY, json.dumps(self.data))
+            except Exception:  # noqa: BLE001
+                pass
+            return
         tmp = self.path + ".tmp"
         try:
             with open(tmp, "w", encoding="utf-8") as f:

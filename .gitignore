@@ -3,3 +3,6 @@ dist/
 __pycache__/
 *.pyc
 *.spec
+
+# pygbag working copies (tools/build_web.py)
+*-pygbag.*

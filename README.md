@@ -37,6 +37,21 @@ Japanese text uses the font M PLUS Rounded 1c (SIL Open Font License, see `asset
 Found a problem? See [BUGREPORT.md](BUGREPORT.md) for what to include, then email
 info@shoukugames.org or open an issue at https://github.com/shoukugames/Guess-A-Sketch/issues.
 
+## Play in the browser
+
+Guess-A-Sketch also runs in a web browser, on computers, phones and tablets, with nothing to
+install: <https://shoukugames.org/play/guess-a-sketch/> (test page). Tap the letters on the
+on-screen keyboard (or type on a real one). Progress is saved in the browser.
+
+```bash
+python3 -m pip install pygame pygbag     # plus ffmpeg on PATH (or FFMPEG=/path/to/ffmpeg)
+python3 tools/build_web.py               # -> build/web/: upload the folder as-is
+```
+
+The build uses [pygbag](https://pygame-web.github.io/), which also converts the sounds to OGG.
+`main.py` starts the desktop game, or the browser version when run by pygbag. The `.apk` file
+pygbag writes is its bundle of game files, not an Android app.
+
 ## Run from source
 ```
 pip install pygame

@@ -8,7 +8,7 @@ import webbrowser
 
 import pygame
 
-from . import drawings, i18n, logic, version
+from . import WEB, drawings, i18n, logic, version
 from .i18n import T
 from .audio import Audio
 from .progress import Progress
@@ -203,8 +203,10 @@ class TitleScene(Scene):
         self.lvl_up = Button((x + 416, 432, 64, 56), ">", lambda: self.step_level(1), BLUEBTN, 32)
         self.buttons = [self.play_btn, *self.diff_btns, self.lvl_down, self.lvl_up,
                         Button((x, 520, 480, 56), T("for_parents"), lambda: app.go(ParentScene(app)), PURPLEBTN, 28),
-                        Button((x, 588, 234, 56), T("credits"), lambda: app.go(CreditsScene(app)), (90, 170, 190), 28),
-                        Button((x + 246, 588, 234, 56), T("quit"), app.quit, (130, 134, 150), 28)]
+                        Button((x, 588, 480 if WEB else 234, 56), T("credits"), lambda: app.go(CreditsScene(app)),
+                               (90, 170, 190), 28)]
+        if not WEB:  # a web page has nothing to quit to
+            self.buttons.append(Button((x + 246, 588, 234, 56), T("quit"), app.quit, (130, 134, 150), 28))
         # language toggle (top-right of the main menu)
         self.lang_btns = []
         for i, (code, label) in enumerate((("en", "English"), ("ja", "日本語"))):
@@ -255,7 +257,7 @@ class TitleScene(Scene):
         if e.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
             self.app.audio.sfx("click")
             self.start()
-        elif e.key == pygame.K_ESCAPE:
+        elif e.key == pygame.K_ESCAPE and not WEB:
             self.app.quit()
 
     def update(self, dt):
@@ -797,7 +799,11 @@ class CreditsScene(Scene):
         for url, r in self.links.items():
             if r.collidepoint(pos):
                 try:
-                    webbrowser.open(url)
+                    if WEB:
+                        import platform  # pygbag's bridge to the page
+                        platform.window.open(url, "_blank")
+                    else:
+                        webbrowser.open(url)
                 except Exception:
                     pass
                 return True
@@ -856,7 +862,10 @@ class App:
             w, h = int(W * k), int(H * k)
         self.windowed_size = (w, h)
         self.fullscreen = False
-        self.window = pygame.display.set_mode((w, h), pygame.RESIZABLE)
+        if WEB:  # a fixed-size canvas; the page scales it to fit the browser window
+            self.window = pygame.display.set_mode((W, H))
+        else:
+            self.window = pygame.display.set_mode((w, h), pygame.RESIZABLE)
         self.canvas = pygame.Surface((W, H))
         self.clock = pygame.time.Clock()
         FONTS = Fonts()
@@ -905,7 +914,7 @@ class App:
         scene.enter()
 
     def quit(self):
-        self.running = False
+        self.running = WEB  # in a browser there is nothing to quit to
 
     def viewport(self):
         ww, wh = self.window.get_size()
@@ -926,31 +935,46 @@ class App:
             self.window = pygame.display.set_mode(self.windowed_size, pygame.RESIZABLE)
 
     # ------------------------------------------------------------ loop
+    def frame(self):
+        dt = min(self.clock.tick(FPS) / 1000.0, 0.1)
+        self.window = pygame.display.get_surface()
+        if WEB and self.window.get_size() != (W, H):
+            # pygbag can resize the page canvas after the game opened it; ask for the real size again
+            self.window = pygame.display.set_mode((W, H))
+        self.mouse = self.to_logical(pygame.mouse.get_pos())
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                self.running = WEB
+            elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
+                pos = self.to_logical(e.pos)
+                if self.mute_btn.collidepoint(pos):
+                    self.audio.toggle_mute()
+                else:
+                    self.scene.on_click(pos)
+            elif e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_F11:
+                    if not WEB:
+                        self.toggle_fullscreen()
+                elif e.key == pygame.K_F1 or (e.key == pygame.K_m and not isinstance(self.scene, PlayScene)):
+                    self.audio.toggle_mute()
+                else:
+                    self.scene.on_key(e)
+            elif e.type == pygame.WINDOWFOCUSLOST and isinstance(self.scene, PlayScene):
+                self.scene.pause()
+        self.scene.update(dt)
+        self.render()
+
+    async def run_web(self):
+        """Browser main loop: hands control back to the page after every frame."""
+        import asyncio
+        while True:  # a web page has no "quit"; closing the tab ends the game
+            self.running = True
+            self.frame()
+            await asyncio.sleep(0)
+
     def run(self):
         while self.running:
-            dt = min(self.clock.tick(FPS) / 1000.0, 0.1)
-            self.window = pygame.display.get_surface()
-            self.mouse = self.to_logical(pygame.mouse.get_pos())
-            for e in pygame.event.get():
-                if e.type == pygame.QUIT:
-                    self.running = False
-                elif e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-                    pos = self.to_logical(e.pos)
-                    if self.mute_btn.collidepoint(pos):
-                        self.audio.toggle_mute()
-                    else:
-                        self.scene.on_click(pos)
-                elif e.type == pygame.KEYDOWN:
-                    if e.key == pygame.K_F11:
-                        self.toggle_fullscreen()
-                    elif e.key == pygame.K_F1 or (e.key == pygame.K_m and not isinstance(self.scene, PlayScene)):
-                        self.audio.toggle_mute()
-                    else:
-                        self.scene.on_key(e)
-                elif e.type == pygame.WINDOWFOCUSLOST and isinstance(self.scene, PlayScene):
-                    self.scene.pause()
-            self.scene.update(dt)
-            self.render()
+            self.frame()
         if hasattr(self.scene, "on_close"):
             self.scene.on_close()
         pygame.quit()
