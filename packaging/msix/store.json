@@ -1,0 +1,12 @@
+{
+ "_note": "Replace identity_name, publisher and publisher_display_name with the values from Partner Center (Product management -> Product identity) before uploading to the Microsoft Store.",
+ "identity_name": "ShoukuGames.GuessASketch",
+ "publisher": "CN=ShoukuGamesPlaceholder",
+ "publisher_display_name": "Shouku Games",
+ "display_name": "Guess-A-Sketch",
+ "description": "A hangman-style spelling game. Every wrong letter sketches more of the mystery object, so spell the word before the drawing is finished.",
+ "file_name": "GuessASketch",
+ "exe_name": "GuessASketch.exe",
+ "alias": "shouku-guess-a-sketch.exe",
+ "device_capabilities": []
+}
